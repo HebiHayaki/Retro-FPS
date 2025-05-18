@@ -3,17 +3,11 @@ using UnityEngine;
 public class HealthPickup : MonoBehaviour
 {
     public int healthAmount = 25;
+    private ItemSpawner spawner;
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    public void Initialize(ItemSpawner spawner)
     {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
+        this.spawner = spawner;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -21,6 +15,11 @@ public class HealthPickup : MonoBehaviour
         if (other.tag == "Player")
         {
             PlayerController.instance.AddHeath(healthAmount);
+
+            if (spawner != null)
+            {
+                spawner.DecreaseItemCount();
+            }
 
             Destroy(gameObject);
         }

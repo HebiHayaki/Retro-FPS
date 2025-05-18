@@ -1,58 +1,122 @@
+using System.Net.NetworkInformation;
 using UnityEngine;
 
 public class EnemyController : MonoBehaviour
 {
-    public int health = 3;
-    public GameObject explosion;
+    [Header("Health Settings")]
+    public float health = 4f;
 
-    public float playerRange = 10f;
-
-    public Rigidbody2D theRB;
+    [Header("Movement Settings")]
+    public float playerRange = 50f;
+    public float minDistance = 3f;
+    public float maxDistance = 5f;
     public float moveSpeed;
 
+    [Header("Shooting Settings")]
     public bool shouldShoot;
-    public float fireRate = .5f;
-    private float shotCounter;
+    public float fireRate = 1f;
     public GameObject bullet;
     public Transform firePoint;
+
+    [Header("References")]
+    public Rigidbody2D theRB;
+    public GameObject explosion;
+    [SerializeField]
+    private GameObject expPrefab;
+
+    private float shotCounter;
+    private EnemySpawner spawner;
+    private Transform playerTransform;
 
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
-        
+        playerTransform = PlayerController.instance.transform;
+        shotCounter = fireRate;
     }
 
     // Update is called once per frame
     void Update()
     {
-        if (Vector3.Distance(transform.position, PlayerController.instance.transform.position) < playerRange)
+        if (playerTransform == null) return;
+
+        Vector3 playerDirection = playerTransform.position - transform.position;
+        float distanceToPlayer = playerDirection.magnitude;
+
+        HandleMovement(playerDirection, distanceToPlayer);
+
+        if (shouldShoot && distanceToPlayer < playerRange)
         {
-            Vector3 playerDirection = PlayerController.instance.transform.position - transform.position;
+            HandleShooting();
+        }
+    }
 
-            theRB.linearVelocity = playerDirection.normalized * moveSpeed;
-
-            if (shouldShoot)
+    private void HandleMovement(Vector3 playerDirection, float distanceToPlayer)
+    {
+        if (distanceToPlayer < playerRange)
+        {
+            if (distanceToPlayer < minDistance)
             {
-                shotCounter -= Time.deltaTime;
-                if (shotCounter <= 0)
-                {
-                    Instantiate(bullet, firePoint.position, firePoint.rotation);
-                    shotCounter = fireRate;
-                }
+                theRB.linearVelocity = -playerDirection.normalized * moveSpeed;
             }
-        } else
+            else if (distanceToPlayer > maxDistance)
+            {
+                theRB.linearVelocity = playerDirection.normalized * moveSpeed;
+            }
+            else
+            {
+                theRB.linearVelocity = Vector2.zero;
+            }
+        }
+        else
         {
             theRB.linearVelocity = Vector2.zero;
         }
     }
 
-    public void TakeDamage()
+    private void HandleShooting()
     {
-        health--;
+        shotCounter -= Time.deltaTime;
+        if (shotCounter <= 0f)
+        {
+            Instantiate(bullet, firePoint.position, firePoint.rotation);
+            shotCounter = fireRate;
+        }
+    }
+
+    public void TakeDamage(float damage)
+    {
+        health -= damage;
+
         if (health <= 0)
         {
-            Destroy(gameObject);
+            Die();
+        }
+    }
+
+    private void Die()
+    {
+        Destroy(gameObject);
+        if (explosion != null)
+        {
             Instantiate(explosion, transform.position, transform.rotation);
+        }
+        if (expPrefab != null)
+        {
+            Instantiate(expPrefab, transform.position, Quaternion.identity);
+        }
+    }
+
+    public void Initialize(EnemySpawner spawner)
+    {
+        this.spawner = spawner;
+    }
+
+    private void OnDestroy()
+    {
+        if (spawner != null)
+        {
+            spawner.DecreaseEnemyCount();
         }
     }
 }

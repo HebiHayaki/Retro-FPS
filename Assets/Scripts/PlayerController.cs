@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 public class PlayerController : MonoBehaviour
@@ -7,103 +8,124 @@ public class PlayerController : MonoBehaviour
 
     public Rigidbody2D theRB;
 
+    [Header("Movement")]
     public float moveSpeed = 5f;
-
     private Vector2 moveInput;
+
+    [Header("View Control")]
     private Vector2 mouseInput;
-
     public float mouseSensitivity = 1f;
-
     public Camera viewCam;
-
     float maxAngle = 160;
     float minAngle = 10;
 
+    [Header("Shooting")]
     public GameObject bulletImpact;
-    public int currentAmmo;
+    public float fireCooldown = 0f;
 
+    [Header("Player Stats")]
+    public int currentAmmo;
+    public int maxHealth = 100;
+    public int currentHealth;
+
+    [Header("UI")]
+    public GameObject deadScreen;
+    public Text healthTex, ammoTex;
+
+    [Header("Animation")]
     public Animator gunAnim;
     public Animator anim;
 
-    public int currentHealth;
-    public int maxHealth = 100;
-
-    public GameObject deadScreen;
-
-    private bool hasDied;
-
-    public Text healthTex, ammoTex;
+    public bool hasDied;
+    public bool isCameraFrozen = false;
 
     private void Awake()
     {
         instance = this;
     }
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         currentHealth = maxHealth;
         healthTex.text = currentHealth.ToString() + "%";
-
         ammoTex.text = currentAmmo.ToString();
     }
 
     // Update is called once per frame
     void Update()
     {
-        if (!hasDied)
+        if (!hasDied && !PauseMenu.isPaused)
         {
-            // Player movement
-            moveInput = new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
+            HandleMovement();
+            HandleViewControl();
+            HandleShooting();
+        }
+    }
 
-            Vector3 moveHorizontal = transform.up * -moveInput.x;
+    public void HandleMovement()
+    {
+        moveInput = new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
 
-            Vector3 moveVertical = transform.right * moveInput.y;
+        Vector3 moveHorizontal = transform.up * -moveInput.x;
+        Vector3 moveVertical = transform.right * moveInput.y;
 
-            theRB.linearVelocity = (moveHorizontal + moveVertical) * moveSpeed;
+        theRB.linearVelocity = (moveHorizontal + moveVertical) * moveSpeed;
 
-            // Player view control
-            mouseInput = new Vector2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y")) * mouseSensitivity;
+        if (moveInput != Vector2.zero)
+        {
+            anim.SetBool("isMoving", true);
+        }
+        else
+        {
+            anim.SetBool("isMoving", false);
+        }
+    }
 
-            transform.rotation = Quaternion.Euler(transform.rotation.eulerAngles.x, transform.rotation.eulerAngles.y, transform.rotation.eulerAngles.z - mouseInput.x);
+    public void HandleViewControl()
+    {
+        if (isCameraFrozen) return;
 
-            Vector3 RotAmount = viewCam.transform.localRotation.eulerAngles + new Vector3(0f, mouseInput.y, 0f);
+        mouseInput = new Vector2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y")) * mouseSensitivity;
 
-            viewCam.transform.localRotation = Quaternion.Euler(RotAmount.x, Mathf.Clamp(RotAmount.y, minAngle, maxAngle), RotAmount.z);
+        transform.rotation = Quaternion.Euler(transform.rotation.eulerAngles.x, transform.rotation.eulerAngles.y, transform.rotation.eulerAngles.z - mouseInput.x);
 
-            // Shooting
-            if (Input.GetMouseButtonDown(0))
+        Vector3 RotAmount = viewCam.transform.localRotation.eulerAngles + new Vector3(0f, mouseInput.y, 0f);
+
+        viewCam.transform.localRotation = Quaternion.Euler(RotAmount.x, Mathf.Clamp(RotAmount.y, minAngle, maxAngle), RotAmount.z);
+    }
+
+    public virtual bool IsFireButtonPressed()
+    {
+        return Input.GetMouseButtonDown(0);
+    }
+
+    public void HandleShooting()
+    {
+        fireCooldown -= Time.deltaTime;
+
+        if (IsFireButtonPressed() && fireCooldown <= 0f)
+        {
+            if (currentAmmo > 0)
             {
-                if (currentAmmo > 0)
+                Ray ray = viewCam.ViewportPointToRay(new Vector3(.5f, .5f, 0f));
+                RaycastHit hit;
+                if (Physics.Raycast(ray, out hit))
                 {
-                    Ray ray = viewCam.ViewportPointToRay(new Vector3(.5f, .5f, 0f));
-                    RaycastHit hit;
-                    if (Physics.Raycast(ray, out hit))
-                    {
-                        // Debug.Log("I'm looking at " + hit.transform.name);
-                        Instantiate(bulletImpact, hit.point, transform.rotation);
+                    Instantiate(bulletImpact, hit.point, transform.rotation);
 
-                        if (hit.transform.tag == "Enemy")
-                        {
-                            hit.transform.parent.GetComponent<EnemyController>().TakeDamage();
-                        }
-                    }
-                    else
+                    if (hit.transform.tag == "Enemy")
                     {
-                        Debug.Log("I'm looking at nothing");
+                        hit.transform.parent.GetComponent<EnemyController>().TakeDamage(UpgradeManager.instance.weaponDamage);
                     }
-                    currentAmmo--;
-                    gunAnim.SetTrigger("Shoot");
-                    UpdateAmmoUI();
                 }
-            }
+                else
+                {
+                    Debug.Log("I'm looking at nothing");
+                }
 
-            if (moveInput != Vector2.zero)
-            {
-                anim.SetBool("isMoving", true);
-            } else
-            {
-                anim.SetBool("isMoving", false);
+                currentAmmo--;
+                gunAnim.SetTrigger("Shoot");
+                UpdateAmmoUI();
             }
         }
     }
@@ -113,9 +135,7 @@ public class PlayerController : MonoBehaviour
         currentHealth -= damageAmount;
         if (currentHealth <= 0)
         {
-            deadScreen.SetActive(true);
-            hasDied = true;
-            currentHealth = 0;
+            Die();
         }
 
         healthTex.text = currentHealth.ToString() + "%";
@@ -135,5 +155,17 @@ public class PlayerController : MonoBehaviour
     public void UpdateAmmoUI()
     {
         ammoTex.text = currentAmmo.ToString();
+    }
+
+    public void Die()
+    {
+        deadScreen.SetActive(true);
+            hasDied = true;
+            currentHealth = 0;
+
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+
+            Time.timeScale = 0f;
     }
 }

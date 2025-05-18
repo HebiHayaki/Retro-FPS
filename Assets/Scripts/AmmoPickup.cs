@@ -3,17 +3,11 @@ using UnityEngine;
 public class AmmoPickup : MonoBehaviour
 {
     public int ammoAmount = 25;
+    private ItemSpawner spawner;
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    public void Initialize(ItemSpawner spawner)
     {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
+        this.spawner = spawner;
     }
 
     private void OnTriggerEnter2D(Collider2D other)
@@ -22,6 +16,11 @@ public class AmmoPickup : MonoBehaviour
         {
             PlayerController.instance.currentAmmo += ammoAmount;
             PlayerController.instance.UpdateAmmoUI();
+
+            if (spawner != null)
+            {
+                spawner.DecreaseItemCount();
+            }
 
             Destroy(gameObject);
         }
